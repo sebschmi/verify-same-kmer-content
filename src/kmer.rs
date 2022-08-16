@@ -12,7 +12,7 @@ impl<
     > FromIterator<u8> for Kmer<K, Integer>
 {
     fn from_iter<Iter: IntoIterator<Item = u8>>(iter: Iter) -> Self {
-        assert!(2 * K <= std::mem::size_of::<Integer>());
+        assert!(2 * K <= 8 * std::mem::size_of::<Integer>());
 
         let iter = iter.into_iter();
         let size = iter.size_hint();
