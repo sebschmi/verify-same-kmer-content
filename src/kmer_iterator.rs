@@ -28,6 +28,7 @@ pub struct KmerIterator<InputReader: Read, KmerType> {
     buffer: VecDeque<u8>,
     character_buffer: [u8; 1],
     sequence_count: usize,
+    character_count: usize,
     panic_on_parse_error: bool,
     kmer_type: PhantomData<KmerType>,
 }
@@ -42,6 +43,7 @@ impl<InputReader: Read, KmerType> KmerIterator<InputReader, KmerType> {
             buffer: Default::default(),
             character_buffer: Default::default(),
             sequence_count: 0,
+            character_count: 0,
             panic_on_parse_error,
             kmer_type: Default::default(),
         }
@@ -58,6 +60,10 @@ impl<InputReader: Read, KmerType> KmerIterator<InputReader, KmerType> {
 
     pub fn sequence_count(&self) -> usize {
         self.sequence_count
+    }
+
+    pub fn character_count(&self) -> usize {
+        self.character_count
     }
 }
 
@@ -129,6 +135,7 @@ impl<InputReader: Read, KmerType: FromIterator<u8>> Iterator
                             }
                             _ => {
                                 self.state = State::None;
+                                self.character_count += self.buffer.len();
                                 self.buffer.clear();
                                 break;
                             }
@@ -136,11 +143,13 @@ impl<InputReader: Read, KmerType: FromIterator<u8>> Iterator
                         assert!(self.buffer.len() <= self.k);
                         if self.buffer.len() == self.k {
                             let kmer = self.buffer.iter().copied().collect();
+                            self.character_count += 1;
                             self.buffer.pop_front();
                             return Some(kmer);
                         }
                     } else {
                         self.state = State::Eof;
+                        self.character_count += self.buffer.len();
                         self.buffer.clear();
                         break;
                     }
@@ -167,6 +176,7 @@ impl<InputReader: Read, KmerType: FromIterator<u8>> Iterator
                                 b'\n' => { /* ignore newlines */ }
                                 _ => {
                                     self.state = State::None;
+                                    self.character_count += self.buffer.len();
                                     self.buffer.clear();
                                     break;
                                 }
@@ -174,11 +184,13 @@ impl<InputReader: Read, KmerType: FromIterator<u8>> Iterator
                             assert!(self.buffer.len() <= self.k);
                             if self.buffer.len() == self.k {
                                 let kmer = self.buffer.iter().copied().collect();
+                                self.character_count += 1;
                                 self.buffer.pop_front();
                                 return Some(kmer);
                             }
                         } else {
                             self.state = State::Eof;
+                            self.character_count += self.buffer.len();
                             self.buffer.clear();
                             break;
                         }
