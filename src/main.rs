@@ -52,11 +52,20 @@ pub struct Config {
     test_tigs: PathBuf,
 }
 
+#[derive(Debug)]
+enum Error {
+    Mismatch,
+    IllegalKmerSize {
+        #[allow(dead_code)]
+        kmer_size: usize,
+    },
+}
+
 fn compare_kmer_sets<KmerType: FromIterator<u8> + Ord + Copy + Display>(
     unitigs: impl Read,
     test_tigs: impl Read,
     config: Config,
-) {
+) -> Result<(), Error> {
     let mut kmer_iter_unitigs =
         KmerIterator::<_, KmerType>::new(unitigs, config.k, config.panic_on_parse_error);
     let mut kmer_iter_test_tigs =
@@ -143,16 +152,20 @@ fn compare_kmer_sets<KmerType: FromIterator<u8> + Ord + Copy + Display>(
 
     if !has_superfluous_kmers_unitigs && !has_superfluous_kmers_test_tigs {
         info!("Success!");
+        Ok(())
     } else if !has_superfluous_kmers_unitigs {
         error!("Unitigs contain kmers that are missing in test tigs");
+        Err(Error::Mismatch)
     } else if !has_superfluous_kmers_test_tigs {
         error!("Test tigs contains kmers that are missing in unitigs");
+        Err(Error::Mismatch)
     } else {
         error!("Unitigs and test tigs contain kmers that are missing in each other");
+        Err(Error::Mismatch)
     }
 }
 
-fn main() {
+fn main() -> Result<(), Error> {
     let config = Config::parse();
     initialise_logging(config.log_level);
 
@@ -164,7 +177,12 @@ fn main() {
     // This is not the most clever way to handle different kmer sizes in the type system, but it gets the job done.
     // It results in larger binary sizes, but therefore we can have e.g. a Display implementation for Kmer.
     match config.k {
-        0 => error!("Kmer size cannot be zero"),
+        0 => {
+            error!("Kmer size cannot be zero");
+            Err(Error::IllegalKmerSize {
+                kmer_size: config.k,
+            })
+        }
         1 => compare_kmer_sets::<Kmer<1, u32>>(unitigs_file, test_tigs_file, config),
         2 => compare_kmer_sets::<Kmer<2, u32>>(unitigs_file, test_tigs_file, config),
         3 => compare_kmer_sets::<Kmer<3, u32>>(unitigs_file, test_tigs_file, config),
@@ -229,6 +247,11 @@ fn main() {
         62 => compare_kmer_sets::<Kmer<62, u128>>(unitigs_file, test_tigs_file, config),
         63 => compare_kmer_sets::<Kmer<63, u128>>(unitigs_file, test_tigs_file, config),
         64 => compare_kmer_sets::<Kmer<64, u128>>(unitigs_file, test_tigs_file, config),
-        other => error!("Unsupported kmer size: {} > 64", other),
+        other => {
+            error!("Unsupported kmer size: {} > 64", other);
+            Err(Error::IllegalKmerSize {
+                kmer_size: config.k,
+            })
+        }
     }
 }
