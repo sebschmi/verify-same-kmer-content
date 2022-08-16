@@ -168,6 +168,7 @@ fn compare_kmer_sets<KmerType: FromIterator<u8> + Ord + Copy + Display>(
 fn main() -> Result<(), Error> {
     let config = Config::parse();
     initialise_logging(config.log_level);
+    info!("{config:?}");
 
     let unitigs_file = File::open(&config.unitigs)
         .unwrap_or_else(|_| panic!("--unitigs points to a file: {:?}", &config.unitigs));
