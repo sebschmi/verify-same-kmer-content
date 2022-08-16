@@ -31,9 +31,7 @@ impl<
                 .into();
 
                 let result = result << 2;
-                let result = result | bits;
-
-                result
+                result | bits
             }),
         }
     }

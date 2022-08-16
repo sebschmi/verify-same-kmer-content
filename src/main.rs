@@ -93,10 +93,10 @@ fn main() {
     let config = Config::parse();
     initialise_logging(config.log_level);
 
-    let file1 =
-        File::open(&config.file1).expect(&format!("--file1 points to a file: {:?}", &config.file1));
-    let file2 =
-        File::open(&config.file2).expect(&format!("--file2 points to a file: {:?}", &config.file2));
+    let file1 = File::open(&config.file1)
+        .unwrap_or_else(|_| panic!("--file1 points to a file: {:?}", &config.file1));
+    let file2 = File::open(&config.file2)
+        .unwrap_or_else(|_| panic!("--file2 points to a file: {:?}", &config.file2));
 
     match config.k {
         0 => error!("Kmer size cannot be zero"),

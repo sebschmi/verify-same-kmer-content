@@ -4,21 +4,20 @@ use std::io::{BufReader, Read};
 use std::marker::PhantomData;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
-#[allow(non_camel_case_types)]
 enum State {
     None,
-    GFA_S,
-    GFA_Sequence,
-    FA_ID,
-    FA_Sequence,
-    EOF,
+    GfaS,
+    GfaSequence,
+    FaId,
+    FaSequence,
+    Eof,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 enum Format {
     None,
-    GFA,
-    FA,
+    Gfa,
+    Fa,
 }
 
 pub struct KmerIterator<InputReader: Read, KmerType> {
@@ -65,44 +64,44 @@ impl<InputReader: Read, KmerType: FromIterator<u8>> Iterator
                 State::None => loop {
                     let character = self.read_char();
                     if character == Some(b'S') {
-                        if self.format == Format::FA {
+                        if self.format == Format::Fa {
                             warn!("Found GFA within fasta");
                         } else {
-                            self.format = Format::GFA;
+                            self.format = Format::Gfa;
                         }
 
-                        self.state = State::GFA_S;
+                        self.state = State::GfaS;
                         break;
                     } else if character == Some(b'>') {
-                        if self.format == Format::GFA {
+                        if self.format == Format::Gfa {
                             warn!("Found fasta within GFA");
                         } else {
-                            self.format = Format::FA;
+                            self.format = Format::Fa;
                         }
 
-                        self.state = State::FA_ID;
+                        self.state = State::FaId;
                         break;
                     } else if character == None {
-                        self.state = State::EOF;
+                        self.state = State::Eof;
                         break;
                     }
                 },
-                State::GFA_S => {
+                State::GfaS => {
                     let character = self.read_char();
                     if character == Some(b'\t') {
                         loop {
                             let character = self.read_char();
                             if character == Some(b'\t') {
-                                self.state = State::GFA_Sequence;
+                                self.state = State::GfaSequence;
                                 break;
                             } else if character == None {
-                                self.state = State::EOF;
+                                self.state = State::Eof;
                                 break;
                             }
                         }
                     }
                 }
-                State::GFA_Sequence => loop {
+                State::GfaSequence => loop {
                     let character = self.read_char();
                     if let Some(character) = character {
                         let character = character.to_ascii_uppercase();
@@ -123,22 +122,22 @@ impl<InputReader: Read, KmerType: FromIterator<u8>> Iterator
                             return Some(kmer);
                         }
                     } else {
-                        self.state = State::EOF;
+                        self.state = State::Eof;
                         self.buffer.clear();
                         break;
                     }
                 },
-                State::FA_ID => loop {
+                State::FaId => loop {
                     let character = self.read_char();
                     if character == Some(b'\n') {
-                        self.state = State::FA_Sequence;
+                        self.state = State::FaSequence;
                         break;
                     } else if character == None {
-                        self.state = State::EOF;
+                        self.state = State::Eof;
                         break;
                     }
                 },
-                State::FA_Sequence => {
+                State::FaSequence => {
                     loop {
                         let character = self.read_char();
                         if let Some(character) = character {
@@ -161,17 +160,17 @@ impl<InputReader: Read, KmerType: FromIterator<u8>> Iterator
                                 return Some(kmer);
                             }
                         } else {
-                            self.state = State::EOF;
+                            self.state = State::Eof;
                             self.buffer.clear();
                             break;
                         }
                     }
                 }
-                State::EOF => break,
+                State::Eof => break,
             }
         }
 
-        assert_eq!(self.state, State::EOF);
+        assert_eq!(self.state, State::Eof);
         if self.format == Format::None {
             warn!("Found no kmers");
         }
