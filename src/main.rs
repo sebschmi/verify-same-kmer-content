@@ -1,4 +1,4 @@
-use crate::kmer::Kmer;
+use crate::kmer::{BitPackedKmer, Kmer};
 use crate::kmer_iterator::KmerIterator;
 use clap::Parser;
 use log::{debug, error, info, LevelFilter};
@@ -8,20 +8,28 @@ use std::fmt::Display;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::PathBuf;
+use std::sync::Mutex;
 
 mod kmer;
 mod kmer_iterator;
 
-pub fn initialise_logging(log_level: LevelFilter) {
-    CombinedLogger::init(vec![TermLogger::new(
-        log_level,
-        Default::default(),
-        TerminalMode::Mixed,
-        ColorChoice::Auto,
-    )])
-    .unwrap();
+static LOGGING_INITIALISED: Mutex<bool> = Mutex::new(false);
 
-    info!("Logging initialised successfully");
+pub fn initialise_logging(log_level: LevelFilter) {
+    let mut logging_initialised = LOGGING_INITIALISED.lock().unwrap();
+
+    if !*logging_initialised {
+        CombinedLogger::init(vec![TermLogger::new(
+            log_level,
+            Default::default(),
+            TerminalMode::Mixed,
+            ColorChoice::Auto,
+        )])
+        .unwrap();
+
+        info!("Logging initialised successfully");
+        *logging_initialised = true;
+    }
 }
 
 /// Verify that an SPSS contains the same kmer content as a set of unitigs.
@@ -61,7 +69,7 @@ enum Error {
     },
 }
 
-fn compare_kmer_sets<KmerType: FromIterator<u8> + Ord + Copy + Display>(
+fn compare_kmer_sets<KmerType: FromIterator<u8> + Ord + Copy + Display + Kmer>(
     unitigs: impl Read,
     test_tigs: impl Read,
     config: Config,
@@ -83,12 +91,21 @@ fn compare_kmer_sets<KmerType: FromIterator<u8> + Ord + Copy + Display>(
         info!("Reading second input file");
         let mut superfluous_kmers_test_tigs = BTreeSet::new();
         for kmer in kmer_iter_test_tigs.by_ref() {
+            let mut found = false;
             if let Ok(index) = kmers_unitigs.binary_search(&kmer) {
                 kmers_unitigs_visited[index] = true;
-            } else {
+                found = true;
+            }
+            if let Ok(index) = kmers_unitigs.binary_search(&kmer.reverse_complement()) {
+                kmers_unitigs_visited[index] = true;
+                found = true;
+            }
+
+            if !found {
                 superfluous_kmers_test_tigs.insert(kmer);
             }
         }
+
         let superfluous_kmers_test_tigs = superfluous_kmers_test_tigs;
         let superfluous_kmers_unitigs: Vec<_> = kmers_unitigs_visited
             .into_iter()
@@ -103,10 +120,10 @@ fn compare_kmer_sets<KmerType: FromIterator<u8> + Ord + Copy + Display>(
             .collect();
 
         for kmer in &superfluous_kmers_unitigs {
-            debug!("File1 contains kmer that is missing in file2: {kmer}");
+            debug!("Unitigs contain kmer that is missing in test tigs: {kmer}");
         }
         for kmer in &superfluous_kmers_test_tigs {
-            debug!("File2 contains kmer that is missing in file1: {kmer}");
+            debug!("Test tigs contains kmer that is missing in unitigs: {kmer}");
         }
 
         assert_eq!(
@@ -184,75 +201,101 @@ fn main() -> Result<(), Error> {
                 kmer_size: config.k,
             })
         }
-        1 => compare_kmer_sets::<Kmer<1, u32>>(unitigs_file, test_tigs_file, config),
-        2 => compare_kmer_sets::<Kmer<2, u32>>(unitigs_file, test_tigs_file, config),
-        3 => compare_kmer_sets::<Kmer<3, u32>>(unitigs_file, test_tigs_file, config),
-        4 => compare_kmer_sets::<Kmer<4, u32>>(unitigs_file, test_tigs_file, config),
-        5 => compare_kmer_sets::<Kmer<5, u32>>(unitigs_file, test_tigs_file, config),
-        6 => compare_kmer_sets::<Kmer<6, u32>>(unitigs_file, test_tigs_file, config),
-        7 => compare_kmer_sets::<Kmer<7, u32>>(unitigs_file, test_tigs_file, config),
-        8 => compare_kmer_sets::<Kmer<8, u32>>(unitigs_file, test_tigs_file, config),
-        9 => compare_kmer_sets::<Kmer<9, u32>>(unitigs_file, test_tigs_file, config),
-        10 => compare_kmer_sets::<Kmer<10, u32>>(unitigs_file, test_tigs_file, config),
-        11 => compare_kmer_sets::<Kmer<11, u32>>(unitigs_file, test_tigs_file, config),
-        12 => compare_kmer_sets::<Kmer<12, u32>>(unitigs_file, test_tigs_file, config),
-        13 => compare_kmer_sets::<Kmer<13, u32>>(unitigs_file, test_tigs_file, config),
-        14 => compare_kmer_sets::<Kmer<14, u32>>(unitigs_file, test_tigs_file, config),
-        15 => compare_kmer_sets::<Kmer<15, u32>>(unitigs_file, test_tigs_file, config),
-        16 => compare_kmer_sets::<Kmer<16, u32>>(unitigs_file, test_tigs_file, config),
-        17 => compare_kmer_sets::<Kmer<17, u64>>(unitigs_file, test_tigs_file, config),
-        18 => compare_kmer_sets::<Kmer<18, u64>>(unitigs_file, test_tigs_file, config),
-        19 => compare_kmer_sets::<Kmer<19, u64>>(unitigs_file, test_tigs_file, config),
-        20 => compare_kmer_sets::<Kmer<20, u64>>(unitigs_file, test_tigs_file, config),
-        21 => compare_kmer_sets::<Kmer<21, u64>>(unitigs_file, test_tigs_file, config),
-        22 => compare_kmer_sets::<Kmer<22, u64>>(unitigs_file, test_tigs_file, config),
-        23 => compare_kmer_sets::<Kmer<23, u64>>(unitigs_file, test_tigs_file, config),
-        24 => compare_kmer_sets::<Kmer<24, u64>>(unitigs_file, test_tigs_file, config),
-        25 => compare_kmer_sets::<Kmer<25, u64>>(unitigs_file, test_tigs_file, config),
-        26 => compare_kmer_sets::<Kmer<26, u64>>(unitigs_file, test_tigs_file, config),
-        27 => compare_kmer_sets::<Kmer<27, u64>>(unitigs_file, test_tigs_file, config),
-        28 => compare_kmer_sets::<Kmer<28, u64>>(unitigs_file, test_tigs_file, config),
-        29 => compare_kmer_sets::<Kmer<29, u64>>(unitigs_file, test_tigs_file, config),
-        30 => compare_kmer_sets::<Kmer<30, u64>>(unitigs_file, test_tigs_file, config),
-        31 => compare_kmer_sets::<Kmer<31, u64>>(unitigs_file, test_tigs_file, config),
-        32 => compare_kmer_sets::<Kmer<32, u64>>(unitigs_file, test_tigs_file, config),
-        33 => compare_kmer_sets::<Kmer<33, u128>>(unitigs_file, test_tigs_file, config),
-        34 => compare_kmer_sets::<Kmer<34, u128>>(unitigs_file, test_tigs_file, config),
-        35 => compare_kmer_sets::<Kmer<35, u128>>(unitigs_file, test_tigs_file, config),
-        36 => compare_kmer_sets::<Kmer<36, u128>>(unitigs_file, test_tigs_file, config),
-        37 => compare_kmer_sets::<Kmer<37, u128>>(unitigs_file, test_tigs_file, config),
-        38 => compare_kmer_sets::<Kmer<38, u128>>(unitigs_file, test_tigs_file, config),
-        39 => compare_kmer_sets::<Kmer<39, u128>>(unitigs_file, test_tigs_file, config),
-        40 => compare_kmer_sets::<Kmer<40, u128>>(unitigs_file, test_tigs_file, config),
-        41 => compare_kmer_sets::<Kmer<41, u128>>(unitigs_file, test_tigs_file, config),
-        42 => compare_kmer_sets::<Kmer<42, u128>>(unitigs_file, test_tigs_file, config),
-        43 => compare_kmer_sets::<Kmer<43, u128>>(unitigs_file, test_tigs_file, config),
-        44 => compare_kmer_sets::<Kmer<44, u128>>(unitigs_file, test_tigs_file, config),
-        45 => compare_kmer_sets::<Kmer<45, u128>>(unitigs_file, test_tigs_file, config),
-        46 => compare_kmer_sets::<Kmer<46, u128>>(unitigs_file, test_tigs_file, config),
-        47 => compare_kmer_sets::<Kmer<47, u128>>(unitigs_file, test_tigs_file, config),
-        48 => compare_kmer_sets::<Kmer<48, u128>>(unitigs_file, test_tigs_file, config),
-        49 => compare_kmer_sets::<Kmer<49, u128>>(unitigs_file, test_tigs_file, config),
-        50 => compare_kmer_sets::<Kmer<50, u128>>(unitigs_file, test_tigs_file, config),
-        51 => compare_kmer_sets::<Kmer<51, u128>>(unitigs_file, test_tigs_file, config),
-        52 => compare_kmer_sets::<Kmer<52, u128>>(unitigs_file, test_tigs_file, config),
-        53 => compare_kmer_sets::<Kmer<53, u128>>(unitigs_file, test_tigs_file, config),
-        54 => compare_kmer_sets::<Kmer<54, u128>>(unitigs_file, test_tigs_file, config),
-        55 => compare_kmer_sets::<Kmer<55, u128>>(unitigs_file, test_tigs_file, config),
-        56 => compare_kmer_sets::<Kmer<56, u128>>(unitigs_file, test_tigs_file, config),
-        57 => compare_kmer_sets::<Kmer<57, u128>>(unitigs_file, test_tigs_file, config),
-        58 => compare_kmer_sets::<Kmer<58, u128>>(unitigs_file, test_tigs_file, config),
-        59 => compare_kmer_sets::<Kmer<59, u128>>(unitigs_file, test_tigs_file, config),
-        60 => compare_kmer_sets::<Kmer<60, u128>>(unitigs_file, test_tigs_file, config),
-        61 => compare_kmer_sets::<Kmer<61, u128>>(unitigs_file, test_tigs_file, config),
-        62 => compare_kmer_sets::<Kmer<62, u128>>(unitigs_file, test_tigs_file, config),
-        63 => compare_kmer_sets::<Kmer<63, u128>>(unitigs_file, test_tigs_file, config),
-        64 => compare_kmer_sets::<Kmer<64, u128>>(unitigs_file, test_tigs_file, config),
+        1 => compare_kmer_sets::<BitPackedKmer<1, u8>>(unitigs_file, test_tigs_file, config),
+        2 => compare_kmer_sets::<BitPackedKmer<2, u8>>(unitigs_file, test_tigs_file, config),
+        3 => compare_kmer_sets::<BitPackedKmer<3, u8>>(unitigs_file, test_tigs_file, config),
+        4 => compare_kmer_sets::<BitPackedKmer<4, u8>>(unitigs_file, test_tigs_file, config),
+        5 => compare_kmer_sets::<BitPackedKmer<5, u16>>(unitigs_file, test_tigs_file, config),
+        6 => compare_kmer_sets::<BitPackedKmer<6, u16>>(unitigs_file, test_tigs_file, config),
+        7 => compare_kmer_sets::<BitPackedKmer<7, u16>>(unitigs_file, test_tigs_file, config),
+        8 => compare_kmer_sets::<BitPackedKmer<8, u16>>(unitigs_file, test_tigs_file, config),
+        9 => compare_kmer_sets::<BitPackedKmer<9, u32>>(unitigs_file, test_tigs_file, config),
+        10 => compare_kmer_sets::<BitPackedKmer<10, u32>>(unitigs_file, test_tigs_file, config),
+        11 => compare_kmer_sets::<BitPackedKmer<11, u32>>(unitigs_file, test_tigs_file, config),
+        12 => compare_kmer_sets::<BitPackedKmer<12, u32>>(unitigs_file, test_tigs_file, config),
+        13 => compare_kmer_sets::<BitPackedKmer<13, u32>>(unitigs_file, test_tigs_file, config),
+        14 => compare_kmer_sets::<BitPackedKmer<14, u32>>(unitigs_file, test_tigs_file, config),
+        15 => compare_kmer_sets::<BitPackedKmer<15, u32>>(unitigs_file, test_tigs_file, config),
+        16 => compare_kmer_sets::<BitPackedKmer<16, u32>>(unitigs_file, test_tigs_file, config),
+        17 => compare_kmer_sets::<BitPackedKmer<17, u64>>(unitigs_file, test_tigs_file, config),
+        18 => compare_kmer_sets::<BitPackedKmer<18, u64>>(unitigs_file, test_tigs_file, config),
+        19 => compare_kmer_sets::<BitPackedKmer<19, u64>>(unitigs_file, test_tigs_file, config),
+        20 => compare_kmer_sets::<BitPackedKmer<20, u64>>(unitigs_file, test_tigs_file, config),
+        21 => compare_kmer_sets::<BitPackedKmer<21, u64>>(unitigs_file, test_tigs_file, config),
+        22 => compare_kmer_sets::<BitPackedKmer<22, u64>>(unitigs_file, test_tigs_file, config),
+        23 => compare_kmer_sets::<BitPackedKmer<23, u64>>(unitigs_file, test_tigs_file, config),
+        24 => compare_kmer_sets::<BitPackedKmer<24, u64>>(unitigs_file, test_tigs_file, config),
+        25 => compare_kmer_sets::<BitPackedKmer<25, u64>>(unitigs_file, test_tigs_file, config),
+        26 => compare_kmer_sets::<BitPackedKmer<26, u64>>(unitigs_file, test_tigs_file, config),
+        27 => compare_kmer_sets::<BitPackedKmer<27, u64>>(unitigs_file, test_tigs_file, config),
+        28 => compare_kmer_sets::<BitPackedKmer<28, u64>>(unitigs_file, test_tigs_file, config),
+        29 => compare_kmer_sets::<BitPackedKmer<29, u64>>(unitigs_file, test_tigs_file, config),
+        30 => compare_kmer_sets::<BitPackedKmer<30, u64>>(unitigs_file, test_tigs_file, config),
+        31 => compare_kmer_sets::<BitPackedKmer<31, u64>>(unitigs_file, test_tigs_file, config),
+        32 => compare_kmer_sets::<BitPackedKmer<32, u64>>(unitigs_file, test_tigs_file, config),
+        33 => compare_kmer_sets::<BitPackedKmer<33, u128>>(unitigs_file, test_tigs_file, config),
+        34 => compare_kmer_sets::<BitPackedKmer<34, u128>>(unitigs_file, test_tigs_file, config),
+        35 => compare_kmer_sets::<BitPackedKmer<35, u128>>(unitigs_file, test_tigs_file, config),
+        36 => compare_kmer_sets::<BitPackedKmer<36, u128>>(unitigs_file, test_tigs_file, config),
+        37 => compare_kmer_sets::<BitPackedKmer<37, u128>>(unitigs_file, test_tigs_file, config),
+        38 => compare_kmer_sets::<BitPackedKmer<38, u128>>(unitigs_file, test_tigs_file, config),
+        39 => compare_kmer_sets::<BitPackedKmer<39, u128>>(unitigs_file, test_tigs_file, config),
+        40 => compare_kmer_sets::<BitPackedKmer<40, u128>>(unitigs_file, test_tigs_file, config),
+        41 => compare_kmer_sets::<BitPackedKmer<41, u128>>(unitigs_file, test_tigs_file, config),
+        42 => compare_kmer_sets::<BitPackedKmer<42, u128>>(unitigs_file, test_tigs_file, config),
+        43 => compare_kmer_sets::<BitPackedKmer<43, u128>>(unitigs_file, test_tigs_file, config),
+        44 => compare_kmer_sets::<BitPackedKmer<44, u128>>(unitigs_file, test_tigs_file, config),
+        45 => compare_kmer_sets::<BitPackedKmer<45, u128>>(unitigs_file, test_tigs_file, config),
+        46 => compare_kmer_sets::<BitPackedKmer<46, u128>>(unitigs_file, test_tigs_file, config),
+        47 => compare_kmer_sets::<BitPackedKmer<47, u128>>(unitigs_file, test_tigs_file, config),
+        48 => compare_kmer_sets::<BitPackedKmer<48, u128>>(unitigs_file, test_tigs_file, config),
+        49 => compare_kmer_sets::<BitPackedKmer<49, u128>>(unitigs_file, test_tigs_file, config),
+        50 => compare_kmer_sets::<BitPackedKmer<50, u128>>(unitigs_file, test_tigs_file, config),
+        51 => compare_kmer_sets::<BitPackedKmer<51, u128>>(unitigs_file, test_tigs_file, config),
+        52 => compare_kmer_sets::<BitPackedKmer<52, u128>>(unitigs_file, test_tigs_file, config),
+        53 => compare_kmer_sets::<BitPackedKmer<53, u128>>(unitigs_file, test_tigs_file, config),
+        54 => compare_kmer_sets::<BitPackedKmer<54, u128>>(unitigs_file, test_tigs_file, config),
+        55 => compare_kmer_sets::<BitPackedKmer<55, u128>>(unitigs_file, test_tigs_file, config),
+        56 => compare_kmer_sets::<BitPackedKmer<56, u128>>(unitigs_file, test_tigs_file, config),
+        57 => compare_kmer_sets::<BitPackedKmer<57, u128>>(unitigs_file, test_tigs_file, config),
+        58 => compare_kmer_sets::<BitPackedKmer<58, u128>>(unitigs_file, test_tigs_file, config),
+        59 => compare_kmer_sets::<BitPackedKmer<59, u128>>(unitigs_file, test_tigs_file, config),
+        60 => compare_kmer_sets::<BitPackedKmer<60, u128>>(unitigs_file, test_tigs_file, config),
+        61 => compare_kmer_sets::<BitPackedKmer<61, u128>>(unitigs_file, test_tigs_file, config),
+        62 => compare_kmer_sets::<BitPackedKmer<62, u128>>(unitigs_file, test_tigs_file, config),
+        63 => compare_kmer_sets::<BitPackedKmer<63, u128>>(unitigs_file, test_tigs_file, config),
+        64 => compare_kmer_sets::<BitPackedKmer<64, u128>>(unitigs_file, test_tigs_file, config),
         other => {
             error!("Unsupported kmer size: {} > 64", other);
             Err(Error::IllegalKmerSize {
                 kmer_size: config.k,
             })
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{compare_kmer_sets, initialise_logging, BitPackedKmer, Config};
+    use log::LevelFilter;
+
+    #[test]
+    fn test_simple() {
+        initialise_logging(LevelFilter::Debug);
+        let unitigs = ">a\nAAACTG";
+        let test_tigs = ">\nAAAC\n>\nCAGT";
+        assert!(compare_kmer_sets::<BitPackedKmer<3, u8>>(
+            unitigs.as_bytes(),
+            test_tigs.as_bytes(),
+            Config {
+                log_level: LevelFilter::Debug,
+                k: 3,
+                do_not_verify: false,
+                panic_on_parse_error: true,
+                unitigs: Default::default(),
+                test_tigs: Default::default(),
+            }
+        )
+        .is_ok());
     }
 }

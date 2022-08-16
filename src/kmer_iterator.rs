@@ -73,7 +73,7 @@ impl<InputReader: Read, KmerType: FromIterator<u8>> Iterator
     type Item = KmerType;
 
     fn next(&mut self) -> Option<KmerType> {
-        loop {
+        while self.state != State::Eof {
             match self.state {
                 State::None => loop {
                     let character = self.read_char();
@@ -125,21 +125,23 @@ impl<InputReader: Read, KmerType: FromIterator<u8>> Iterator
                         }
                     }
                 }
-                State::GfaSequence => loop {
-                    let character = self.read_char();
-                    if let Some(character) = character {
-                        let character = character.to_ascii_uppercase();
-                        match character {
-                            b'A' | b'C' | b'G' | b'T' => {
-                                self.buffer.push_back(character);
+                State::GfaSequence => {
+                    while self.state == State::GfaSequence {
+                        let character = self.read_char();
+                        if let Some(character) = character {
+                            let character = character.to_ascii_uppercase();
+                            match character {
+                                b'A' | b'C' | b'G' | b'T' => {
+                                    self.buffer.push_back(character);
+                                }
+                                _ => {
+                                    self.state = State::None;
+                                }
                             }
-                            _ => {
-                                self.state = State::None;
-                                self.character_count += self.buffer.len();
-                                self.buffer.clear();
-                                break;
-                            }
+                        } else {
+                            self.state = State::Eof;
                         }
+
                         assert!(self.buffer.len() <= self.k);
                         if self.buffer.len() == self.k {
                             let kmer = self.buffer.iter().copied().collect();
@@ -147,13 +149,11 @@ impl<InputReader: Read, KmerType: FromIterator<u8>> Iterator
                             self.buffer.pop_front();
                             return Some(kmer);
                         }
-                    } else {
-                        self.state = State::Eof;
-                        self.character_count += self.buffer.len();
-                        self.buffer.clear();
-                        break;
                     }
-                },
+
+                    self.character_count += self.buffer.len();
+                    self.buffer.clear();
+                }
                 State::FaId => loop {
                     let character = self.read_char();
                     if character == Some(b'\n') {
@@ -165,7 +165,7 @@ impl<InputReader: Read, KmerType: FromIterator<u8>> Iterator
                     }
                 },
                 State::FaSequence => {
-                    loop {
+                    while self.state == State::FaSequence {
                         let character = self.read_char();
                         if let Some(character) = character {
                             let character = character.to_ascii_uppercase();
@@ -174,29 +174,30 @@ impl<InputReader: Read, KmerType: FromIterator<u8>> Iterator
                                     self.buffer.push_back(character);
                                 }
                                 b'\n' => { /* ignore newlines */ }
+                                b'>' => {
+                                    self.state = State::FaId;
+                                }
                                 _ => {
                                     self.state = State::None;
-                                    self.character_count += self.buffer.len();
-                                    self.buffer.clear();
-                                    break;
                                 }
-                            }
-                            assert!(self.buffer.len() <= self.k);
-                            if self.buffer.len() == self.k {
-                                let kmer = self.buffer.iter().copied().collect();
-                                self.character_count += 1;
-                                self.buffer.pop_front();
-                                return Some(kmer);
                             }
                         } else {
                             self.state = State::Eof;
-                            self.character_count += self.buffer.len();
-                            self.buffer.clear();
-                            break;
+                        }
+
+                        assert!(self.buffer.len() <= self.k);
+                        if self.buffer.len() == self.k {
+                            let kmer = self.buffer.iter().copied().collect();
+                            self.character_count += 1;
+                            self.buffer.pop_front();
+                            return Some(kmer);
                         }
                     }
+
+                    self.character_count += self.buffer.len();
+                    self.buffer.clear();
                 }
-                State::Eof => break,
+                State::Eof => unreachable!("Loop is not entered when self.state == State::Eof"),
             }
         }
 
@@ -209,5 +210,29 @@ impl<InputReader: Read, KmerType: FromIterator<u8>> Iterator
             }
         }
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{initialise_logging, BitPackedKmer, KmerIterator};
+    use log::LevelFilter;
+
+    #[test]
+    fn test_simple_fa() {
+        initialise_logging(LevelFilter::Debug);
+        let tigs = ">b\nAAAC\n>\nCAGT\n>a\nCCC";
+        let kmers: Vec<_> =
+            KmerIterator::<_, BitPackedKmer<3, u8>>::new(tigs.as_bytes(), 3, true).collect();
+        assert_eq!(
+            kmers,
+            vec![
+                BitPackedKmer::from_iter("AAA".as_bytes().iter().copied()),
+                BitPackedKmer::from_iter("AAC".as_bytes().iter().copied()),
+                BitPackedKmer::from_iter("CAG".as_bytes().iter().copied()),
+                BitPackedKmer::from_iter("AGT".as_bytes().iter().copied()),
+                BitPackedKmer::from_iter("CCC".as_bytes().iter().copied()),
+            ]
+        );
     }
 }
