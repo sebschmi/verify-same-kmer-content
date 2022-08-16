@@ -88,7 +88,6 @@ impl<InputReader: Read, KmerType: FromIterator<u8>> Iterator
                             self.format = Format::Gfa;
                         }
 
-                        self.sequence_count += 1;
                         self.state = State::GfaS;
                         break;
                     } else if character == Some(b'>') {
@@ -102,7 +101,6 @@ impl<InputReader: Read, KmerType: FromIterator<u8>> Iterator
                             self.format = Format::Fa;
                         }
 
-                        self.sequence_count += 1;
                         self.state = State::FaId;
                         break;
                     } else if character == None {
@@ -116,6 +114,7 @@ impl<InputReader: Read, KmerType: FromIterator<u8>> Iterator
                         loop {
                             let character = self.read_char();
                             if character == Some(b'\t') {
+                                self.sequence_count += 1;
                                 self.state = State::GfaSequence;
                                 break;
                             } else if character == None {
@@ -157,6 +156,7 @@ impl<InputReader: Read, KmerType: FromIterator<u8>> Iterator
                 State::FaId => loop {
                     let character = self.read_char();
                     if character == Some(b'\n') {
+                        self.sequence_count += 1;
                         self.state = State::FaSequence;
                         break;
                     } else if character == None {
@@ -222,8 +222,8 @@ mod tests {
     fn test_simple_fa() {
         initialise_logging(LevelFilter::Debug);
         let tigs = ">b\nAAAC\n>\nCAGT\n>a\nCCC";
-        let kmers: Vec<_> =
-            KmerIterator::<_, BitPackedKmer<3, u8>>::new(tigs.as_bytes(), 3, true).collect();
+        let mut iterator = KmerIterator::<_, BitPackedKmer<3, u8>>::new(tigs.as_bytes(), 3, true);
+        let kmers: Vec<_> = iterator.by_ref().collect();
         assert_eq!(
             kmers,
             vec![
@@ -234,5 +234,7 @@ mod tests {
                 BitPackedKmer::from_iter("CCC".as_bytes().iter().copied()),
             ]
         );
+        assert_eq!(iterator.sequence_count(), 3);
+        assert_eq!(iterator.character_count(), 11);
     }
 }

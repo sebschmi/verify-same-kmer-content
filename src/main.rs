@@ -82,11 +82,10 @@ fn compare_kmer_sets<KmerType: FromIterator<u8> + Ord + Copy + Display + Kmer>(
     let (has_superfluous_kmers_unitigs, has_superfluous_kmers_test_tigs) = if !config.do_not_verify
     {
         info!("Reading first input file");
-        let kmers_unitigs: Vec<_> = kmer_iter_unitigs.by_ref().collect();
+        let mut kmers_unitigs: Vec<_> = kmer_iter_unitigs.by_ref().collect();
+        kmers_unitigs.sort_unstable();
+        let kmers_unitigs = kmers_unitigs;
         let mut kmers_unitigs_visited = vec![false; kmers_unitigs.len()];
-
-        // assert that kmers1 is sorted
-        debug_assert!(kmers_unitigs.windows(2).all(|w| w[0] <= w[1]));
 
         info!("Reading second input file");
         let mut superfluous_kmers_test_tigs = BTreeSet::new();
@@ -129,7 +128,11 @@ fn compare_kmer_sets<KmerType: FromIterator<u8> + Ord + Copy + Display + Kmer>(
         assert_eq!(
             kmers_unitigs.len(),
             kmer_iter_unitigs.character_count()
-                - kmer_iter_unitigs.sequence_count() * (config.k - 1)
+                - kmer_iter_unitigs.sequence_count() * (config.k - 1),
+            "character_count: {}; sequence_count: {}; k: {}",
+            kmer_iter_unitigs.character_count(),
+            kmer_iter_unitigs.sequence_count(),
+            config.k
         );
         (
             !superfluous_kmers_unitigs.is_empty(),
@@ -282,8 +285,8 @@ mod tests {
     #[test]
     fn test_simple() {
         initialise_logging(LevelFilter::Debug);
-        let unitigs = ">a\nAAACTG";
-        let test_tigs = ">\nAAAC\n>\nCAGT";
+        let unitigs = ">a\nTAAACTG";
+        let test_tigs = ">\nTAAAC\n>\nCAGT\n";
         assert!(compare_kmer_sets::<BitPackedKmer<3, u8>>(
             unitigs.as_bytes(),
             test_tigs.as_bytes(),
