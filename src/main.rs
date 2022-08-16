@@ -301,4 +301,24 @@ mod tests {
         )
         .is_ok());
     }
+
+    #[test]
+    fn test_self_complemental_node() {
+        initialise_logging(LevelFilter::Debug);
+        let unitigs = ">a\nTAATTACTG";
+        let test_tigs = ">\nTAATTA\n>\nCAGTAA\n";
+        assert!(compare_kmer_sets::<BitPackedKmer<4, u8>>(
+            unitigs.as_bytes(),
+            test_tigs.as_bytes(),
+            Config {
+                log_level: LevelFilter::Debug,
+                k: 4,
+                do_not_verify: false,
+                panic_on_parse_error: true,
+                unitigs: Default::default(),
+                test_tigs: Default::default(),
+            }
+        )
+        .is_ok());
+    }
 }
