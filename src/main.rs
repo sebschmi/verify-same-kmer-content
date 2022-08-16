@@ -24,23 +24,30 @@ pub fn initialise_logging(log_level: LevelFilter) {
     info!("Logging initialised successfully");
 }
 
+/// Verify that an SPSS contains the same kmer content as a set of unitigs.
 #[derive(Parser, Debug)]
 pub struct Config {
+    /// The desired log level.
     #[clap(short, long, default_value = "Info")]
     log_level: LevelFilter,
 
+    /// The kmer size.
     #[clap(short)]
     k: usize,
 
+    /// Skip the actual verification, and only compute statistics.
     #[clap(long)]
-    do_verify: bool,
+    do_not_verify: bool,
 
+    /// Do not print warnings during parsing, but instead abort if there is any warning.
     #[clap(long)]
     panic_on_parse_error: bool,
 
+    /// A file containing the ground truth kmer set as unitigs.
     #[clap(index = 1)]
     unitigs: PathBuf,
 
+    /// A file containing the test kmer set as any set of strings.
     #[clap(index = 2)]
     test_tigs: PathBuf,
 }
@@ -55,7 +62,8 @@ fn compare_kmer_sets<KmerType: FromIterator<u8> + Ord + Copy + Display>(
     let mut kmer_iter_test_tigs =
         KmerIterator::<_, KmerType>::new(test_tigs, config.k, config.panic_on_parse_error);
 
-    let (has_superfluous_kmers_unitigs, has_superfluous_kmers_test_tigs) = if config.do_verify {
+    let (has_superfluous_kmers_unitigs, has_superfluous_kmers_test_tigs) = if !config.do_not_verify
+    {
         info!("Reading first input file");
         let kmers_unitigs: Vec<_> = kmer_iter_unitigs.by_ref().collect();
         let mut kmers_unitigs_visited = vec![false; kmers_unitigs.len()];
