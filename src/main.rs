@@ -35,10 +35,10 @@ pub struct Config {
     #[clap(long)]
     panic_on_parse_error: bool,
 
-    #[clap(index = 0)]
+    #[clap(index = 1)]
     file1: PathBuf,
 
-    #[clap(index = 1)]
+    #[clap(index = 2)]
     file2: PathBuf,
 }
 
