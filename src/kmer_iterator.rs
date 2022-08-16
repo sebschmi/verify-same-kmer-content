@@ -27,11 +27,13 @@ pub struct KmerIterator<InputReader: Read, KmerType> {
     format: Format,
     buffer: VecDeque<u8>,
     character_buffer: [u8; 1],
+    sequence_count: usize,
+    panic_on_parse_error: bool,
     kmer_type: PhantomData<KmerType>,
 }
 
 impl<InputReader: Read, KmerType> KmerIterator<InputReader, KmerType> {
-    pub fn new(input: InputReader, k: usize) -> Self {
+    pub fn new(input: InputReader, k: usize, panic_on_parse_error: bool) -> Self {
         Self {
             input: BufReader::with_capacity(16 * 1024 * 1024, input),
             k,
@@ -39,6 +41,8 @@ impl<InputReader: Read, KmerType> KmerIterator<InputReader, KmerType> {
             format: Format::None,
             buffer: Default::default(),
             character_buffer: Default::default(),
+            sequence_count: 0,
+            panic_on_parse_error,
             kmer_type: Default::default(),
         }
     }
@@ -50,6 +54,10 @@ impl<InputReader: Read, KmerType> KmerIterator<InputReader, KmerType> {
         } else {
             None
         }
+    }
+
+    pub fn sequence_count(&self) -> usize {
+        self.sequence_count
     }
 }
 
@@ -65,20 +73,30 @@ impl<InputReader: Read, KmerType: FromIterator<u8>> Iterator
                     let character = self.read_char();
                     if character == Some(b'S') {
                         if self.format == Format::Fa {
-                            warn!("Found GFA within fasta");
+                            if self.panic_on_parse_error {
+                                panic!("Found GFA within fasta");
+                            } else {
+                                warn!("Found GFA within fasta");
+                            }
                         } else {
                             self.format = Format::Gfa;
                         }
 
+                        self.sequence_count += 1;
                         self.state = State::GfaS;
                         break;
                     } else if character == Some(b'>') {
                         if self.format == Format::Gfa {
-                            warn!("Found fasta within GFA");
+                            if self.panic_on_parse_error {
+                                panic!("Found fasta within GFA");
+                            } else {
+                                warn!("Found fasta within GFA");
+                            }
                         } else {
                             self.format = Format::Fa;
                         }
 
+                        self.sequence_count += 1;
                         self.state = State::FaId;
                         break;
                     } else if character == None {
@@ -172,7 +190,11 @@ impl<InputReader: Read, KmerType: FromIterator<u8>> Iterator
 
         assert_eq!(self.state, State::Eof);
         if self.format == Format::None {
-            warn!("Found no kmers");
+            if self.panic_on_parse_error {
+                panic!("Found no kmers");
+            } else {
+                warn!("Found no kmers");
+            }
         }
         None
     }
