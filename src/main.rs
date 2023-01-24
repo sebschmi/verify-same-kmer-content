@@ -1,4 +1,4 @@
-use crate::kmer::{BitPackedKmer, Kmer};
+use crate::kmer::{BitPackedKmer, BitPackedVectorKmer, Kmer};
 use crate::kmer_iterator::KmerIterator;
 use clap::Parser;
 use log::{debug, error, info, LevelFilter};
@@ -69,7 +69,7 @@ enum Error {
     },
 }
 
-fn compare_kmer_sets<KmerType: FromIterator<u8> + Ord + Copy + Display + Kmer>(
+fn compare_kmer_sets<KmerType: FromIterator<u8> + Ord + Clone + Display + Kmer>(
     unitigs: impl Read,
     test_tigs: impl Read,
     config: Config,
@@ -113,7 +113,7 @@ fn compare_kmer_sets<KmerType: FromIterator<u8> + Ord + Copy + Display + Kmer>(
                 if visited {
                     None
                 } else {
-                    Some(kmers_unitigs[index])
+                    Some(kmers_unitigs[index].clone())
                 }
             })
             .collect();
@@ -268,12 +268,7 @@ fn main() -> Result<(), Error> {
         62 => compare_kmer_sets::<BitPackedKmer<62, u128>>(unitigs_file, test_tigs_file, config),
         63 => compare_kmer_sets::<BitPackedKmer<63, u128>>(unitigs_file, test_tigs_file, config),
         64 => compare_kmer_sets::<BitPackedKmer<64, u128>>(unitigs_file, test_tigs_file, config),
-        other => {
-            error!("Unsupported kmer size: {} > 64", other);
-            Err(Error::IllegalKmerSize {
-                kmer_size: config.k,
-            })
-        }
+        _ => compare_kmer_sets::<BitPackedVectorKmer>(unitigs_file, test_tigs_file, config),
     }
 }
 

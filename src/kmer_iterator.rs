@@ -103,7 +103,7 @@ impl<InputReader: Read, KmerType: FromIterator<u8>> Iterator
 
                         self.state = State::FaId;
                         break;
-                    } else if character == None {
+                    } else if character.is_none() {
                         self.state = State::Eof;
                         break;
                     }
@@ -117,7 +117,7 @@ impl<InputReader: Read, KmerType: FromIterator<u8>> Iterator
                                 self.sequence_count += 1;
                                 self.state = State::GfaSequence;
                                 break;
-                            } else if character == None {
+                            } else if character.is_none() {
                                 self.state = State::Eof;
                                 break;
                             }
@@ -159,7 +159,7 @@ impl<InputReader: Read, KmerType: FromIterator<u8>> Iterator
                         self.sequence_count += 1;
                         self.state = State::FaSequence;
                         break;
-                    } else if character == None {
+                    } else if character.is_none() {
                         self.state = State::Eof;
                         break;
                     }

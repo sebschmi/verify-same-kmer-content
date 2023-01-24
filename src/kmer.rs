@@ -1,9 +1,19 @@
+use bitvec::vec::BitVec;
 use std::fmt::{Display, Formatter};
 use std::ops::{BitAnd, BitOr, BitOrAssign, Not, Shl, ShlAssign, ShrAssign};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord)]
 pub struct BitPackedKmer<const K: usize, Integer> {
     kmer: Integer,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord)]
+pub struct BitPackedVectorKmer {
+    kmer: BitVec,
+}
+
+pub trait Kmer {
+    fn reverse_complement(&self) -> Self;
 }
 
 impl<
@@ -32,6 +42,28 @@ impl<
 
                 let result = result << 2;
                 result | bits
+            }),
+        }
+    }
+}
+
+impl FromIterator<u8> for BitPackedVectorKmer {
+    fn from_iter<T: IntoIterator<Item = u8>>(iter: T) -> Self {
+        let iter = iter.into_iter();
+        let kmer = BitVec::with_capacity(iter.size_hint().0 * 2);
+        BitPackedVectorKmer {
+            kmer: iter.fold(kmer, |mut result, character| {
+                let bits = match character {
+                    b'A' => 0,
+                    b'C' => 1,
+                    b'G' => 2,
+                    b'T' => 3,
+                    other => panic!("Not a DNA character: {other}"),
+                };
+
+                result.push(bits & 2 != 0);
+                result.push(bits & 1 != 0);
+                result
             }),
         }
     }
@@ -70,6 +102,26 @@ impl<
     }
 }
 
+impl Display for BitPackedVectorKmer {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        assert_eq!(self.kmer.len() % 2, 0);
+        for bits in self.kmer.chunks(2) {
+            write!(
+                f,
+                "{}",
+                match (bits[0], bits[1]) {
+                    (false, false) => 'A',
+                    (false, true) => 'C',
+                    (true, false) => 'G',
+                    (true, true) => 'T',
+                }
+            )?;
+        }
+
+        Ok(())
+    }
+}
+
 impl<
         const K: usize,
         Integer: BitAnd<Integer, Output = Integer>
@@ -94,13 +146,23 @@ impl<
     }
 }
 
-pub trait Kmer {
-    fn reverse_complement(&self) -> Self;
+impl Kmer for BitPackedVectorKmer {
+    fn reverse_complement(&self) -> Self {
+        assert_eq!(self.kmer.len() % 2, 0);
+        Self {
+            kmer: self
+                .kmer
+                .chunks(2)
+                .rev()
+                .flat_map(|bits| [!bits[0], !bits[1]])
+                .collect(),
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::kmer::Kmer;
+    use crate::kmer::{BitPackedVectorKmer, Kmer};
     use crate::BitPackedKmer;
 
     #[test]
@@ -139,6 +201,38 @@ mod tests {
             BitPackedKmer::<4, u8>::from_iter("ACAA".as_bytes().iter().copied())
                 .reverse_complement(),
             BitPackedKmer::<4, u8>::from_iter("TTGT".as_bytes().iter().copied())
+        );
+
+        assert_eq!(
+            BitPackedVectorKmer::from_iter("AAA".as_bytes().iter().copied()).reverse_complement(),
+            BitPackedVectorKmer::from_iter("TTT".as_bytes().iter().copied())
+        );
+        assert_eq!(
+            BitPackedVectorKmer::from_iter("ACA".as_bytes().iter().copied()).reverse_complement(),
+            BitPackedVectorKmer::from_iter("TGT".as_bytes().iter().copied())
+        );
+        assert_eq!(
+            BitPackedVectorKmer::from_iter("ACC".as_bytes().iter().copied()).reverse_complement(),
+            BitPackedVectorKmer::from_iter("GGT".as_bytes().iter().copied())
+        );
+        assert_eq!(
+            BitPackedVectorKmer::from_iter(
+                "ACAACAACAACAACAACAACAACAACAACAACAACAACAACAACATTTTTT"
+                    .as_bytes()
+                    .iter()
+                    .copied()
+            )
+            .reverse_complement(),
+            BitPackedVectorKmer::from_iter(
+                "AAAAAATGTTGTTGTTGTTGTTGTTGTTGTTGTTGTTGTTGTTGTTGTTGT"
+                    .as_bytes()
+                    .iter()
+                    .copied()
+            )
+        );
+        assert_eq!(
+            BitPackedVectorKmer::from_iter("ACAA".as_bytes().iter().copied()).reverse_complement(),
+            BitPackedVectorKmer::from_iter("TTGT".as_bytes().iter().copied())
         );
     }
 }
