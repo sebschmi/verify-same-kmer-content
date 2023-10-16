@@ -177,6 +177,7 @@ fn compare_kmer_sets<KmerType: FromIterator<u8> + Ord + Clone + Display + Kmer>(
     let compression_rate = test_tigs_sequence_size as f64 / unitigs_sequence_size as f64;
     let string_count_rate = test_tigs_string_count as f64 / unitigs_string_count as f64;
     let unique_kmer_count = unitigs_sequence_size - unitigs_string_count * (config.k - 1);
+    let test_tigs_kmer_count = test_tigs_sequence_size - test_tigs_string_count * (config.k - 1);
 
     std::io::stdout().flush().unwrap();
     std::io::stderr().flush().unwrap();
@@ -194,8 +195,15 @@ fn compare_kmer_sets<KmerType: FromIterator<u8> + Ord + Clone + Display + Kmer>(
     std::io::stderr().flush().unwrap();
 
     if !has_superfluous_kmers_unitigs && !has_superfluous_kmers_test_tigs {
-        info!("Success!");
-        Ok(())
+        if unique_kmer_count == test_tigs_kmer_count {
+            info!("Success!");
+            Ok(())
+        } else {
+            debug!("Unitig kmer count: {unique_kmer_count}");
+            debug!("Test tigs kmer count: {test_tigs_kmer_count}");
+            error!("Kmer counts between unitigs and test tigs do not match");
+            Err(Error::Mismatch)
+        }
     } else if !has_superfluous_kmers_unitigs {
         error!("Unitigs contain kmers that are missing in test tigs");
         Err(Error::Mismatch)
