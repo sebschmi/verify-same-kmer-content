@@ -1,6 +1,6 @@
 use bitvec::vec::BitVec;
-use std::fmt::{Display, Formatter};
-use std::ops::{BitAnd, BitOr, BitOrAssign, Not, Shl, ShlAssign, ShrAssign};
+use std::fmt::{Debug, Display, Formatter};
+use std::ops::{BitAnd, BitOr, BitOrAssign, Not, Shl, ShlAssign, Shr, ShrAssign};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord)]
 pub struct BitPackedKmer<const K: usize, Integer> {
@@ -74,28 +74,25 @@ impl<
         Integer: BitAnd<Integer, Output = Integer>
             + ShlAssign<i32>
             + Shl<usize, Output = Integer>
+            + Shr<usize, Output = Integer>
             + From<u8>
-            + Into<u128>
             + Copy,
     > Display for BitPackedKmer<K, Integer>
+where
+    usize: TryFrom<Integer>,
+    <usize as TryFrom<Integer>>::Error: Debug,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        static CHARACTERS: [char; 4] = ['A', 'C', 'G', 'T'];
+
         let mut current = self.kmer << (std::mem::size_of::<Integer>() * 8 - 2 * K);
-        let mask = (3 << (std::mem::size_of::<Integer>() * 8 - 2)).into();
+        let mask_shift = std::mem::size_of::<Integer>() * 8 - 2;
+        let mask = Integer::from(3u8) << mask_shift;
         for _ in 0..K {
-            let bits = (current & mask).into() >> (std::mem::size_of::<Integer>() * 8 - 2);
+            let bits = (current & mask) >> mask_shift;
             current <<= 2;
-            write!(
-                f,
-                "{}",
-                match bits {
-                    0 => 'A',
-                    1 => 'C',
-                    2 => 'G',
-                    3 => 'T',
-                    _ => unreachable!("Masking with 3 cannot result in any other number"),
-                }
-            )?;
+            let character = CHARACTERS[usize::try_from(bits).unwrap()];
+            write!(f, "{character}",)?;
         }
 
         Ok(())
@@ -162,8 +159,17 @@ impl Kmer for BitPackedVectorKmer {
 
 #[cfg(test)]
 mod tests {
+    use std::iter;
+
     use crate::kmer::{BitPackedVectorKmer, Kmer};
     use crate::BitPackedKmer;
+
+    #[test]
+    fn test_k31_display() {
+        let kmer: String = iter::repeat("A").take(31).collect();
+        let bit_packed_kmer = BitPackedKmer::<31, u64>::from_iter(kmer.bytes());
+        assert_eq!(format!("{bit_packed_kmer}"), kmer);
+    }
 
     #[test]
     fn test_reverse_complement() {

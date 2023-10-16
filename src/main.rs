@@ -83,8 +83,31 @@ fn compare_kmer_sets<KmerType: FromIterator<u8> + Ord + Clone + Display + Kmer>(
     {
         info!("Reading first input file");
         let mut kmers_unitigs: Vec<_> = kmer_iter_unitigs.by_ref().collect();
+        let input_kmer_amount = kmers_unitigs.len();
+        info!("Sorting kmers in first input file");
         kmers_unitigs.sort_unstable();
+
+        info!("Removing duplicates from first input file");
+        kmers_unitigs = if let Some(first) = kmers_unitigs.first() {
+            let mut deduplicated_kmers_unitigs = vec![first.clone()];
+
+            for kmer_pair in kmers_unitigs.windows(2) {
+                if kmer_pair[0] != kmer_pair[1] {
+                    deduplicated_kmers_unitigs.push(kmer_pair[1].clone());
+                }
+            }
+
+            deduplicated_kmers_unitigs
+        } else {
+            Default::default()
+        };
         let kmers_unitigs = kmers_unitigs;
+        let duplicate_kmer_amount = input_kmer_amount - kmers_unitigs.len();
+        debug!(
+            "Duplicate kmers: {duplicate_kmer_amount}/{input_kmer_amount} ({:.0}%)",
+            duplicate_kmer_amount as f64 / input_kmer_amount as f64
+        );
+
         let mut kmers_unitigs_visited = vec![false; kmers_unitigs.len()];
 
         info!("Reading second input file");
@@ -126,7 +149,7 @@ fn compare_kmer_sets<KmerType: FromIterator<u8> + Ord + Clone + Display + Kmer>(
         }
 
         assert_eq!(
-            kmers_unitigs.len(),
+            kmers_unitigs.len() + duplicate_kmer_amount,
             kmer_iter_unitigs.character_count()
                 - kmer_iter_unitigs.sequence_count() * (config.k - 1),
             "character_count: {}; sequence_count: {}; k: {}",
