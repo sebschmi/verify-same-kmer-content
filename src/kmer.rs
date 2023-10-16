@@ -159,14 +159,12 @@ impl Kmer for BitPackedVectorKmer {
 
 #[cfg(test)]
 mod tests {
-    use std::iter;
-
     use crate::kmer::{BitPackedVectorKmer, Kmer};
     use crate::BitPackedKmer;
 
     #[test]
     fn test_k31_display() {
-        let kmer: String = iter::repeat("A").take(31).collect();
+        let kmer: String = "A".repeat(31);
         let bit_packed_kmer = BitPackedKmer::<31, u64>::from_iter(kmer.bytes());
         assert_eq!(format!("{bit_packed_kmer}"), kmer);
     }
