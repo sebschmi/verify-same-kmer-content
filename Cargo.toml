@@ -4,7 +4,7 @@ description = "Verify that an SPSS has the same kmer content as a set of unitigs
 version = "1.2.0"
 edition = "2021"
 license = "BSD-2-Clause"
-rust-version = "1.64.0"
+rust-version = "1.70.0"
 repository = "https://github.com/sebschmi/verify-same-kmer-content"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
