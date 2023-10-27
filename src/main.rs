@@ -3,6 +3,7 @@ use crate::kmer_iterator::KmerIterator;
 use clap::Parser;
 use log::{debug, error, info, LevelFilter};
 use simplelog::{ColorChoice, CombinedLogger, TermLogger, TerminalMode};
+use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::fmt::Display;
 use std::fs::File;
@@ -195,14 +196,24 @@ fn compare_kmer_sets<KmerType: FromIterator<u8> + Ord + Clone + Display + Kmer>(
     std::io::stderr().flush().unwrap();
 
     if !has_superfluous_kmers_unitigs && !has_superfluous_kmers_test_tigs {
-        if unique_kmer_count == test_tigs_kmer_count {
-            info!("Success!");
-            Ok(())
-        } else {
-            debug!("Unitig kmer count: {unique_kmer_count}");
-            debug!("Test tigs kmer count: {test_tigs_kmer_count}");
-            error!("Kmer counts between unitigs and test tigs do not match");
-            Err(Error::Mismatch)
+        match unique_kmer_count.cmp(&test_tigs_kmer_count) {
+            Ordering::Greater => {
+                debug!("Unitig kmer count: {unique_kmer_count}");
+                debug!("Test tigs kmer count: {test_tigs_kmer_count}");
+                error!("Test tigs are missing kmers. Note that the test tigs are assumed to contain no duplicate kmers.");
+                Err(Error::Mismatch)
+            }
+            Ordering::Equal => {
+                info!("Success!");
+                Ok(())
+            }
+            Ordering::Less => {
+                debug!("Unitig kmer count: {unique_kmer_count}");
+                debug!("Test tigs kmer count: {test_tigs_kmer_count}");
+                info!("Test tigs contain more kmers than unitigs. This may happen if they contain duplicates.");
+                info!("Success!");
+                Ok(())
+            }
         }
     } else if !has_superfluous_kmers_unitigs {
         error!("Unitigs contain kmers that are missing in test tigs");
