@@ -187,7 +187,9 @@ fn compare_kmer_sets<KmerType: FromIterator<u8> + Ord + Clone + Display + Kmer>(
         }
 
         if superfluous_unitig_kmer_count != 0 {
-            info!("Test tigs miss {superfluous_unitig_kmer_count} kmers that present in unitigs");
+            info!(
+                "Test tigs miss {superfluous_unitig_kmer_count} kmers that are present in unitigs"
+            );
         }
         if superfluous_test_tig_kmer_count != 0 {
             info!("Test tigs contain {superfluous_test_tig_kmer_count} kmers that are not present in unitigs");
@@ -251,10 +253,10 @@ fn compare_kmer_sets<KmerType: FromIterator<u8> + Ord + Clone + Display + Kmer>(
             }
         }
     } else if !has_superfluous_kmers_unitigs {
-        error!("Test tigs miss kmers that are present in unitigs");
+        error!("Test tigs contain kmers that are missing in unitigs");
         Err(Error::Mismatch)
     } else if !has_superfluous_kmers_test_tigs {
-        error!("Test tigs contains kmers that are missing in unitigs");
+        error!("Test tigs miss kmers that are present in unitigs");
         Err(Error::Mismatch)
     } else {
         error!("Test tigs both miss kmers and contain kmers that are not present in unitigs");
