@@ -12,8 +12,17 @@ pub struct BitPackedVectorKmer {
     kmer: BitVec,
 }
 
-pub trait Kmer {
+pub trait Kmer: Ord + Sized + Clone {
     fn reverse_complement(&self) -> Self;
+
+    fn canonical(&self) -> Self {
+        let reverse_complement = self.reverse_complement();
+        if &reverse_complement < self {
+            reverse_complement
+        } else {
+            self.clone()
+        }
+    }
 }
 
 impl<
@@ -127,7 +136,8 @@ impl<
             + ShlAssign<i32>
             + ShrAssign<i32>
             + From<u8>
-            + Copy,
+            + Copy
+            + Ord,
     > Kmer for BitPackedKmer<K, Integer>
 {
     fn reverse_complement(&self) -> Self {

@@ -4,7 +4,6 @@ use clap::Parser;
 use log::{debug, error, info, LevelFilter};
 use simplelog::{ColorChoice, CombinedLogger, TermLogger, TerminalMode};
 use std::cmp::Ordering;
-use std::collections::BTreeSet;
 use std::fmt::Display;
 use std::fs::File;
 use std::io::{Read, Write};
@@ -83,84 +82,120 @@ fn compare_kmer_sets<KmerType: FromIterator<u8> + Ord + Clone + Display + Kmer>(
     let (has_superfluous_kmers_unitigs, has_superfluous_kmers_test_tigs) = if !config.do_not_verify
     {
         info!("Reading first input file");
-        let mut kmers_unitigs: Vec<_> = kmer_iter_unitigs.by_ref().collect();
-        let input_kmer_amount = kmers_unitigs.len();
+        let mut kmers_unitigs: Vec<_> = kmer_iter_unitigs
+            .by_ref()
+            .map(|kmer| Kmer::canonical(&kmer))
+            .collect();
+        let input_unitig_kmer_amount = kmers_unitigs.len();
         info!("Sorting kmers in first input file");
         kmers_unitigs.sort_unstable();
 
         info!("Removing duplicates from first input file");
-        kmers_unitigs = if let Some(first) = kmers_unitigs.first() {
-            let mut deduplicated_kmers_unitigs = vec![first.clone()];
-
-            for kmer_pair in kmers_unitigs.windows(2) {
-                if kmer_pair[0] != kmer_pair[1] {
-                    deduplicated_kmers_unitigs.push(kmer_pair[1].clone());
-                }
+        let mut previous_kmer = None;
+        kmers_unitigs.retain(|kmer| {
+            if let Some(previous_kmer) = previous_kmer.as_mut() {
+                let result = kmer != previous_kmer;
+                *previous_kmer = kmer.clone();
+                result
+            } else {
+                previous_kmer = Some(kmer.clone());
+                true
             }
+        });
 
-            deduplicated_kmers_unitigs
-        } else {
-            Default::default()
-        };
         let kmers_unitigs = kmers_unitigs;
-        let duplicate_kmer_amount = input_kmer_amount - kmers_unitigs.len();
+        let duplicate_unitig_kmer_amount = input_unitig_kmer_amount - kmers_unitigs.len();
         debug!(
-            "Duplicate kmers: {duplicate_kmer_amount}/{input_kmer_amount} ({:.0}%)",
-            duplicate_kmer_amount as f64 / input_kmer_amount as f64
+            "Duplicate kmers: {duplicate_unitig_kmer_amount}/{input_unitig_kmer_amount} ({:.0}%)",
+            duplicate_unitig_kmer_amount as f64 / input_unitig_kmer_amount as f64
         );
 
-        let mut kmers_unitigs_visited = vec![false; kmers_unitigs.len()];
-
-        info!("Reading second input file");
-        let mut superfluous_kmers_test_tigs = BTreeSet::new();
-        for kmer in kmer_iter_test_tigs.by_ref() {
-            let mut found = false;
-            if let Ok(index) = kmers_unitigs.binary_search(&kmer) {
-                kmers_unitigs_visited[index] = true;
-                found = true;
-            }
-            if let Ok(index) = kmers_unitigs.binary_search(&kmer.reverse_complement()) {
-                kmers_unitigs_visited[index] = true;
-                found = true;
-            }
-
-            if !found {
-                superfluous_kmers_test_tigs.insert(kmer);
-            }
-        }
-
-        let superfluous_kmers_test_tigs = superfluous_kmers_test_tigs;
-        let superfluous_kmers_unitigs: Vec<_> = kmers_unitigs_visited
-            .into_iter()
-            .enumerate()
-            .filter_map(|(index, visited)| {
-                if visited {
-                    None
-                } else {
-                    Some(kmers_unitigs[index].clone())
-                }
-            })
-            .collect();
-
-        for kmer in &superfluous_kmers_unitigs {
-            debug!("Unitigs contain kmer that is missing in test tigs: {kmer}");
-        }
-        for kmer in &superfluous_kmers_test_tigs {
-            debug!("Test tigs contains kmer that is missing in unitigs: {kmer}");
-        }
-
         assert_eq!(
-            kmers_unitigs.len() + duplicate_kmer_amount,
+            kmers_unitigs.len() + duplicate_unitig_kmer_amount,
             kmer_iter_unitigs.character_count()
                 - kmer_iter_unitigs.sequence_count() * (config.k - 1),
-            "character_count: {}; sequence_count: {}; k: {}",
+            "unitigs: character_count: {}; sequence_count: {}; k: {}",
             kmer_iter_unitigs.character_count(),
             kmer_iter_unitigs.sequence_count(),
             config.k
         );
+
+        info!("Reading second input file");
+        let mut kmers_test_tigs: Vec<_> = kmer_iter_test_tigs
+            .by_ref()
+            .map(|kmer| Kmer::canonical(&kmer))
+            .collect();
+        let input_test_tig_kmer_amount = kmers_test_tigs.len();
+        info!("Sorting kmers in second input file");
+        kmers_test_tigs.sort_unstable();
+
+        info!("Removing duplicates from second input file");
+        let mut previous_kmer = None;
+        kmers_test_tigs.retain(|kmer| {
+            if let Some(previous_kmer) = previous_kmer.as_mut() {
+                let result = kmer != previous_kmer;
+                *previous_kmer = kmer.clone();
+                result
+            } else {
+                previous_kmer = Some(kmer.clone());
+                true
+            }
+        });
+
+        let kmers_test_tigs = kmers_test_tigs;
+        let duplicate_test_tig_kmer_amount = input_test_tig_kmer_amount - kmers_test_tigs.len();
+        debug!(
+            "Duplicate kmers: {duplicate_test_tig_kmer_amount}/{input_test_tig_kmer_amount} ({:.0}%)",
+            duplicate_test_tig_kmer_amount as f64 / input_test_tig_kmer_amount as f64
+        );
+
+        assert_eq!(
+            kmers_test_tigs.len() + duplicate_test_tig_kmer_amount,
+            kmer_iter_test_tigs.character_count()
+                - kmer_iter_test_tigs.sequence_count() * (config.k - 1),
+            "unitigs: character_count: {}; sequence_count: {}; k: {}",
+            kmer_iter_test_tigs.character_count(),
+            kmer_iter_test_tigs.sequence_count(),
+            config.k
+        );
+
+        info!("Comparing kmer content");
+        let mut unitig_kmer_iterator = kmers_unitigs.iter().peekable();
+        let mut test_tig_kmer_iterator = kmers_test_tigs.iter().peekable();
+        let mut superfluous_unitig_kmer_count = 0usize;
+        let mut superfluous_test_tig_kmer_count = 0usize;
+
+        while let (Some(unitig_kmer), Some(test_tig_kmer)) =
+            (unitig_kmer_iterator.peek(), test_tig_kmer_iterator.peek())
+        {
+            match unitig_kmer.cmp(test_tig_kmer) {
+                Ordering::Less => {
+                    superfluous_unitig_kmer_count += 1;
+                    debug!("Unitigs contain kmer that is missing in test tigs: {unitig_kmer}");
+                    unitig_kmer_iterator.next().unwrap();
+                }
+                Ordering::Equal => {
+                    unitig_kmer_iterator.next().unwrap();
+                    test_tig_kmer_iterator.next().unwrap();
+                }
+                Ordering::Greater => {
+                    superfluous_test_tig_kmer_count += 1;
+                    debug!("Test tigs contains kmer that is missing in unitigs: {test_tig_kmer}");
+                    test_tig_kmer_iterator.next().unwrap();
+                }
+            }
+        }
+
+        if superfluous_unitig_kmer_count != 0 {
+            info!("Test tigs miss {superfluous_unitig_kmer_count} kmers that present in unitigs");
+        }
+        if superfluous_test_tig_kmer_count != 0 {
+            info!("Test tigs contain {superfluous_test_tig_kmer_count} kmers that are not present in unitigs");
+        }
+
         (
-            !superfluous_kmers_unitigs.is_empty(),
-            !superfluous_kmers_test_tigs.is_empty(),
+            superfluous_unitig_kmer_count != 0,
+            superfluous_test_tig_kmer_count != 0,
         )
     } else {
         info!("Reading first input file");
@@ -216,13 +251,13 @@ fn compare_kmer_sets<KmerType: FromIterator<u8> + Ord + Clone + Display + Kmer>(
             }
         }
     } else if !has_superfluous_kmers_unitigs {
-        error!("Unitigs contain kmers that are missing in test tigs");
+        error!("Test tigs miss kmers that are present in unitigs");
         Err(Error::Mismatch)
     } else if !has_superfluous_kmers_test_tigs {
         error!("Test tigs contains kmers that are missing in unitigs");
         Err(Error::Mismatch)
     } else {
-        error!("Unitigs and test tigs contain kmers that are missing in each other");
+        error!("Test tigs both miss kmers and contain kmers that are not present in unitigs");
         Err(Error::Mismatch)
     }
 }
@@ -324,7 +359,8 @@ mod tests {
         initialise_logging(LevelFilter::Debug);
         let unitigs = ">a\nTAAACTG";
         let test_tigs = ">\nTAAAC\n>\nCAGT\n";
-        assert!(compare_kmer_sets::<BitPackedKmer<3, u8>>(
+
+        let result = compare_kmer_sets::<BitPackedKmer<3, u8>>(
             unitigs.as_bytes(),
             test_tigs.as_bytes(),
             Config {
@@ -334,9 +370,10 @@ mod tests {
                 panic_on_parse_error: true,
                 unitigs: Default::default(),
                 test_tigs: Default::default(),
-            }
-        )
-        .is_ok());
+            },
+        );
+
+        assert!(result.is_ok(), "Expected ok result, but got {result:?}");
     }
 
     #[test]
