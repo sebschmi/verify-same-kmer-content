@@ -51,6 +51,15 @@ pub struct Config {
     #[clap(long)]
     panic_on_parse_error: bool,
 
+    /// Do not treat k-mers in the test tigs as missing if they are missing due to cuttlefish2's error.
+    ///
+    /// This allows k-mers to be missing if they are not part of any k+1-mer.
+    /// See [this github issue][1] for details.
+    ///
+    /// [1]: https://github.com/COMBINE-lab/cuttlefish/issues/36
+    #[clap(long)]
+    allow_cuttlefish2_errors: bool,
+
     /// A file containing the ground truth kmer set as unitigs.
     #[clap(index = 1)]
     unitigs: PathBuf,
@@ -120,6 +129,18 @@ fn compare_kmer_sets<KmerType: FromIterator<u8> + Ord + Clone + Display + Kmer>(
             config.k
         );
 
+        let unitig_kmers_without_superstrings = if config.allow_cuttlefish2_errors {
+            info!("Collecting kmers without superstrings");
+            kmers_unitigs
+                .iter()
+                .filter(|&kmer| !has_superstring(kmer, &kmers_unitigs))
+                .cloned()
+                .collect()
+        } else {
+            Vec::new()
+        };
+        debug_assert!(unitig_kmers_without_superstrings.is_sorted());
+
         info!("Reading second input file");
         let mut kmers_test_tigs: Vec<_> = kmer_iter_test_tigs
             .by_ref()
@@ -170,8 +191,13 @@ fn compare_kmer_sets<KmerType: FromIterator<u8> + Ord + Clone + Display + Kmer>(
         {
             match unitig_kmer.cmp(test_tig_kmer) {
                 Ordering::Less => {
-                    superfluous_unitig_kmer_count += 1;
-                    debug!("Unitigs contain kmer that is missing in test tigs: {unitig_kmer}");
+                    if unitig_kmers_without_superstrings
+                        .binary_search(unitig_kmer)
+                        .is_err()
+                    {
+                        superfluous_unitig_kmer_count += 1;
+                        debug!("Unitigs contain kmer that is missing in test tigs: {unitig_kmer}");
+                    }
                     unitig_kmer_iterator.next().unwrap();
                 }
                 Ordering::Equal => {
@@ -262,6 +288,30 @@ fn compare_kmer_sets<KmerType: FromIterator<u8> + Ord + Clone + Display + Kmer>(
         error!("Test tigs both miss kmers and contain kmers that are not present in unitigs");
         Err(Error::Mismatch)
     }
+}
+
+fn has_superstring<KmerType: FromIterator<u8> + Ord + Clone + Display + Kmer>(
+    kmer: &KmerType,
+    all_kmers: &[KmerType],
+) -> bool {
+    debug_assert!(all_kmers.is_sorted());
+
+    for &character in b"ACGT" {
+        let predecessor = kmer.predecessor(character);
+        let successor = kmer.successor(character);
+        let predecessor_rc = predecessor.reverse_complement();
+        let successor_rc = successor.reverse_complement();
+
+        if all_kmers.binary_search(&predecessor).is_ok()
+            || all_kmers.binary_search(&successor).is_ok()
+            || all_kmers.binary_search(&predecessor_rc).is_ok()
+            || all_kmers.binary_search(&successor_rc).is_ok()
+        {
+            return true;
+        }
+    }
+
+    false
 }
 
 fn main() -> Result<(), Error> {
@@ -370,6 +420,7 @@ mod tests {
                 k: 3,
                 do_not_verify: false,
                 panic_on_parse_error: true,
+                allow_cuttlefish2_errors: false,
                 unitigs: Default::default(),
                 test_tigs: Default::default(),
             },
@@ -391,6 +442,7 @@ mod tests {
                 k: 4,
                 do_not_verify: false,
                 panic_on_parse_error: true,
+                allow_cuttlefish2_errors: false,
                 unitigs: Default::default(),
                 test_tigs: Default::default(),
             }

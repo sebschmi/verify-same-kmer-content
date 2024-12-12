@@ -23,6 +23,10 @@ pub trait Kmer: Ord + Sized + Clone {
             self.clone()
         }
     }
+
+    fn predecessor(&self, character: u8) -> Self;
+
+    fn successor(&self, character: u8) -> Self;
 }
 
 impl<
@@ -151,6 +155,45 @@ impl<
 
         BitPackedKmer { kmer: result }
     }
+
+    fn predecessor(&self, character: u8) -> Self {
+        let mut character_bits = Integer::from(match character {
+            b'A' => 0,
+            b'C' => 1,
+            b'G' => 2,
+            b'T' => 3,
+            other => panic!("Not a DNA character: {other}"),
+        });
+        character_bits <<= (i32::try_from(K).unwrap() - 1) * 2;
+
+        let mut kmer = self.kmer;
+        kmer >>= 2;
+        kmer |= character_bits;
+
+        Self { kmer }
+    }
+
+    fn successor(&self, character: u8) -> Self {
+        let character_bits = match character {
+            b'A' => 0,
+            b'C' => 1,
+            b'G' => 2,
+            b'T' => 3,
+            other => panic!("Not a DNA character: {other}"),
+        };
+
+        let mut kmer = self.kmer;
+        kmer <<= 2;
+        kmer |= character_bits.into();
+
+        // Clear high bits.
+        let mut mask = Integer::from(3);
+        mask <<= i32::try_from(K).unwrap() * 2;
+        mask = !mask;
+        kmer = kmer & mask;
+
+        Self { kmer }
+    }
 }
 
 impl Kmer for BitPackedVectorKmer {
@@ -164,6 +207,41 @@ impl Kmer for BitPackedVectorKmer {
                 .flat_map(|bits| [!bits[0], !bits[1]])
                 .collect(),
         }
+    }
+
+    fn predecessor(&self, character: u8) -> Self {
+        let bits = match character {
+            b'A' => 0,
+            b'C' => 1,
+            b'G' => 2,
+            b'T' => 3,
+            other => panic!("Not a DNA character: {other}"),
+        };
+
+        let mut kmer = self.kmer.clone();
+        kmer.shift_right(2);
+        kmer.set(1, bits & 1 != 0);
+        kmer.set(0, bits & 2 != 0);
+
+        Self { kmer }
+    }
+
+    fn successor(&self, character: u8) -> Self {
+        let bits = match character {
+            b'A' => 0,
+            b'C' => 1,
+            b'G' => 2,
+            b'T' => 3,
+            other => panic!("Not a DNA character: {other}"),
+        };
+
+        let mut kmer = self.kmer.clone();
+        kmer.shift_left(2);
+        let kmer_len = kmer.len();
+        kmer.set(kmer_len - 1, bits & 1 != 0);
+        kmer.set(kmer_len - 2, bits & 2 != 0);
+
+        Self { kmer }
     }
 }
 
@@ -247,6 +325,46 @@ mod tests {
         assert_eq!(
             BitPackedVectorKmer::from_iter("ACAA".as_bytes().iter().copied()).reverse_complement(),
             BitPackedVectorKmer::from_iter("TTGT".as_bytes().iter().copied())
+        );
+    }
+
+    #[test]
+    fn test_predecessor_successor() {
+        assert_eq!(
+            BitPackedKmer::<3, u8>::from_iter("GGG".as_bytes().iter().copied()).successor(b'C'),
+            BitPackedKmer::<3, u8>::from_iter("GGC".as_bytes().iter().copied())
+        );
+        assert_eq!(
+            BitPackedKmer::<3, u8>::from_iter("GGG".as_bytes().iter().copied()).predecessor(b'C'),
+            BitPackedKmer::<3, u8>::from_iter("CGG".as_bytes().iter().copied())
+        );
+        assert_eq!(
+            BitPackedVectorKmer::from_iter("GGG".as_bytes().iter().copied()).successor(b'C'),
+            BitPackedVectorKmer::from_iter("GGC".as_bytes().iter().copied())
+        );
+        assert_eq!(
+            BitPackedVectorKmer::from_iter("GGG".as_bytes().iter().copied()).predecessor(b'C'),
+            BitPackedVectorKmer::from_iter("CGG".as_bytes().iter().copied())
+        );
+        assert_eq!(
+            BitPackedVectorKmer::from_iter("GGG".as_bytes().iter().copied()).successor(b'A'),
+            BitPackedVectorKmer::from_iter("GGA".as_bytes().iter().copied())
+        );
+        assert_eq!(
+            BitPackedVectorKmer::from_iter("GGG".as_bytes().iter().copied()).predecessor(b'A'),
+            BitPackedVectorKmer::from_iter("AGG".as_bytes().iter().copied())
+        );
+        assert_eq!(
+            BitPackedVectorKmer::from_iter("GGG".as_bytes().iter().copied())
+                .successor(b'A')
+                .predecessor(b'A'),
+            BitPackedVectorKmer::from_iter("AGG".as_bytes().iter().copied())
+        );
+        assert_eq!(
+            BitPackedVectorKmer::from_iter("GGG".as_bytes().iter().copied())
+                .predecessor(b'A')
+                .successor(b'A'),
+            BitPackedVectorKmer::from_iter("GGA".as_bytes().iter().copied())
         );
     }
 }
