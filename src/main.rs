@@ -140,6 +140,9 @@ fn compare_kmer_sets<KmerType: FromIterator<u8> + Ord + Clone + Display + Kmer>(
             Vec::new()
         };
         debug_assert!(unitig_kmers_without_superstrings.is_sorted());
+        for kmer in &unitig_kmers_without_superstrings {
+            debug!("Unitig kmer without superstrings: {kmer}");
+        }
 
         info!("Reading second input file");
         let mut kmers_test_tigs: Vec<_> = kmer_iter_test_tigs
@@ -263,8 +266,14 @@ fn compare_kmer_sets<KmerType: FromIterator<u8> + Ord + Clone + Display + Kmer>(
             Ordering::Greater => {
                 debug!("Unitig kmer count: {unique_kmer_count}");
                 debug!("Test tigs kmer count: {test_tigs_kmer_count}");
-                error!("Test tigs are missing kmers. Note that the test tigs are assumed to contain no duplicate kmers.");
-                Err(Error::Mismatch)
+                if config.allow_cuttlefish2_errors {
+                    debug!("Missing kmers in test tigs are ignored because cuttlefish2 errors are allowed.");
+                    info!("Success!");
+                    Ok(())
+                } else {
+                    error!("Test tigs are missing kmers. Note that the test tigs are assumed to contain no duplicate kmers.");
+                    Err(Error::Mismatch)
+                }
             }
             Ordering::Equal => {
                 info!("Success!");
